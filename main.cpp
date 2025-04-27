@@ -1,5 +1,4 @@
 ﻿#include "hotell.h"
-
 #include <QApplication>
 #include <QLabel>
 

@@ -1,71 +1,68 @@
 ﻿#include "hotell.h"
 #include "ui_hotell.h"
-#include <QLineEdit>
-#include <QPushButton>
 #include <QMessageBox>
-#include <tuple>
+#include <fstream>
 
 Hotell::Hotell(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::Hotell)
+    , hotelliRuumid(new ruumid(RUUMIDE_ARV))
 {
     ui->setupUi(this);
-
-    // Ühendab 3 sisendit ja salvestamise nupu
-    connect(ui->savePushButton, &QPushButton::clicked, this, &Hotell::handleRegistration);
-
-    // Ühendus, mis puhastab toa numbrid sisendiväljadest peale broneerimist
-    connect(ui->savePushButton, &QPushButton::clicked, this, &Hotell::clearInputs);
-
-    // Ühendus toa numbri ja kustutamise nupuga
-    connect(ui->removePushButton, &QPushButton::clicked, this, &Hotell::handleRemoval);
-
+    
+    std::fstream db("db.txt");
+    if (db.is_open()) {
+        std::string rida;
+        while (std::getline(db, rida)) {
+            std::stringstream ss(rida);
+            std::string osa;
+            std::vector<std::string> osad;
+            while (std::getline(ss, osa, ';')) {
+                osad.push_back(osa);
+            }
+            if (osad.size() == 3) {
+                int ruumId = std::stoi(osad[0]);
+                time_t algus = std::stoll(osad[1]);
+                time_t lopp = std::stoll(osad[2]);
+                if (hotelliRuumid->kontrolli(lopp)) {
+                    hotelliRuumid->salvesta(ruumId, algus, lopp);
+                }
+            }
+        }
+        db.close();
+    }
 }
 
 Hotell::~Hotell()
 {
+    std::fstream db("db.txt", std::ios::out | std::ios::trunc);
+    if (db.is_open()) {
+        hotelliRuumid->kirjutaKoik(db);
+        db.close();
+    }
+    
+    delete hotelliRuumid;
     delete ui;
 }
 
-// Tagastab tuple kolmest sisendist: (Toa number, algusaeg, lõppaeg)
-std::tuple<QString, QDate, QDate> Hotell::handleRegistration(){
-    QString addedRoomNr = ui->roomNrAddInput->text();
-    QDate startDate = ui->startDateInput->date();
-    QDate endDate = ui->endDateInput->date();
-
-    qDebug() << "Nr:" << addedRoomNr << "Start:" << startDate << "End:" << endDate;
-    qDebug() << std::make_tuple(addedRoomNr, startDate, endDate);
-
-    return std::make_tuple(addedRoomNr, startDate, endDate);
-}
-
-// Tagastab toa numbri sõnena mida eemaldada.
-QString Hotell::handleRemoval(){
-    QString removedRoomNr = ui->roomNrRemoveInput->text();
-
-    qDebug() << "Removed nr:" << removedRoomNr;
-
-    clearInputs();
-
-    return removedRoomNr;
-}
-
-
-// Funktsioon toanumbrite sisendivälja puhastamiseks
-void Hotell::clearInputs() {
-    ui->roomNrAddInput->clear();
-    ui->roomNrRemoveInput->clear();
-}
-
-
-// Nupu funktsioon, mis annab kasutajale teada, et andmed on saadetud
 void Hotell::on_savePushButton_clicked()
 {
-    QMessageBox::information(this, "Hotelli", "Toa broneering lisatud");
+    auto [ruumiNr, algusKuup, loppKuup] = handleRegistration();
+    
+    time_t algus = QDateTime(algusKuup).toSecsSinceEpoch();
+    time_t lopp = QDateTime(loppKuup).toSecsSinceEpoch();
+    
+    if (hotelliRuumid->kontrolli(lopp)) {
+        hotelliRuumid->salvesta(ruumiNr.toInt(), algus, lopp);
+        QMessageBox::information(this, "Success", "Broneering on salvestatud!");
+        clearInputs();
+    } else {
+        QMessageBox::warning(this, "Error", "Vale broneeringu aeg!");
+    }
 }
 
-// Nupu funktsioon, mis annab kasutajale teada, et broneering on kustutatud
 void Hotell::on_removePushButton_clicked()
 {
-    QMessageBox::information(this, "Hotelli", "Toa broneering eemaldatud");
+    QString ruumiNr = handleRemoval();
+    QMessageBox::information(this, "Info", "Ruum " + ruumiNr + " broneeringu eemaldamine pole veel implementeeritud");
 }
